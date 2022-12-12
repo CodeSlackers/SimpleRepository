@@ -1,0 +1,64 @@
+  variables: 
+    buildConfiguration: 'Release'
+    version.MajorMinor: '1.0' 
+    version.Patch: $[counter(variables['version.MajorMinor'], 0)]
+    versionNumber: '$(version.MajorMinor).$(version.Patch)'
+
+  trigger:
+    branches:
+      include:
+      - main
+  
+  jobs:
+   - job: 
+     pool:
+       vmImage: ubuntu-latest
+    
+     steps:
+     - task: UseDotNet@2
+       displayName: 'Use .Net SDK'
+       inputs:
+         packageType: sdk
+         version: 6.0.x
+         installationPath: $(Agent.ToolsDirectory)/dotnet
+
+     - task: DotNetCoreCLI@2
+       displayName: 'Restore'
+       inputs:
+         command: 'restore'
+         projects: 'Src/DataRepository.csproj'
+         feedsToUse: 'select'
+         vstsFeed: ''
+
+     - task: DotNetCoreCLI@2
+       displayName: 'Build'
+       inputs:
+         command: 'build'
+         projects: 'Src/DataRepository.csproj'
+         arguments: '--configuration $(buildConfiguration)'
+
+     - task: DotNetCoreCLI@2
+       displayName: 'Create NuGet Package - Release Version'
+       inputs:
+         command: 'pack'
+         arguments: '--configuration $(buildConfiguration)'
+         packagesToPack: 'Src/DataRepository.csproj'
+         nobuild: true
+         versioningScheme: byEnvVar
+         versionEnvVar: versionNumber
+
+     - task: CmdLine@2
+       inputs:
+         script: 'ls Src/bin/Release/*.*'
+
+     - task: CmdLine@2
+       inputs:
+         script: 'echo "$(versionNumber)"'
+
+     - task: DotNetCoreCLI@2
+       displayName: 'Push NuGet Package'
+       inputs:
+         command: 'push'
+         packagesToPush: '$(Build.ArtifactStagingDirectory)/*.nupkg'
+         nuGetFeedType: 'internal'
+         publishVstsFeed: ''
